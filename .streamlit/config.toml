@@ -1,0 +1,28 @@
+# ===========================================
+# Streamlit App Configuration
+# ===========================================
+
+[server]
+# Naikkan batas upload agar bisa unggah foto/video besar
+maxUploadSize = 50
+# Izinkan file model diambil dari URL
+enableXsrfProtection = false
+
+# Jika deploy di Streamlit Cloud, jangan ubah port
+# port = 8501
+
+[theme]
+base = "light"       # atau "dark"
+primaryColor = "#4CAF50"
+backgroundColor = "#FFFFFF"
+secondaryBackgroundColor = "#F2F2F2"
+textColor = "#000000"
+font = "sans serif"
+
+[global]
+# Mengaktifkan error detail
+developmentMode = false
+
+[client]
+# Gunakan layout wide sebagai default
+toolbarMode = "auto"

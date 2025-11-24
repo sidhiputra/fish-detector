@@ -12,7 +12,7 @@ import cv2
 st.set_page_config(page_title="Fish Freshness Detector", layout="centered")
 
 # ---------- CONFIG ----------
-MODEL_FILENAME = "weights/yolov8m_fish_freshness.pt"  # ganti sesuai nama model kamu
+MODEL_FILENAME = "weights/best.pt"  # ganti sesuai nama model kamu
 # Optionally set an external model URL in Streamlit Secrets as {"MODEL_URL": "https://.../model.pt"}
 MODEL_URL = st.secrets.get("MODEL_URL", None)
 
@@ -126,3 +126,4 @@ if uploaded:
     st.caption("Catatan: jika model kamu memberi label kelas seperti 'fresh' atau 'stale', gunakan hasil deteksi di atas. Aplikasi ini tidak mengubah output model.")
 else:
     st.info("Silakan upload gambar untuk memulai.")
+

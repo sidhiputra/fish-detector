@@ -1,4 +1,7 @@
 # app.py
+import os
+os.environ["OPENCV_VIDEOIO_PRIORITY_MSMF"] = "0"
+os.environ["OMP_NUM_THREADS"] = "1"
 import streamlit as st
 from ultralytics import YOLO
 import numpy as np
@@ -126,4 +129,5 @@ if uploaded:
     st.caption("Catatan: jika model kamu memberi label kelas seperti 'fresh' atau 'stale', gunakan hasil deteksi di atas. Aplikasi ini tidak mengubah output model.")
 else:
     st.info("Silakan upload gambar untuk memulai.")
+
 

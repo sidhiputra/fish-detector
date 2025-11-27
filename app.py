@@ -1,28 +1,27 @@
-# app.py
+# app.py — FINAL STREAMLIT VERSION (NO CV2)
+
 import os
 os.environ["OPENCV_VIDEOIO_PRIORITY_MSMF"] = "0"
 os.environ["OMP_NUM_THREADS"] = "1"
+
 import streamlit as st
 from ultralytics import YOLO
 import numpy as np
-from PIL import Image
-import io
-import os
+from PIL import Image, ImageDraw
 import requests
-import tempfile
-import cv2
+import io
 
 st.set_page_config(page_title="Fish Freshness Detector", layout="centered")
 
 # ---------- CONFIG ----------
-MODEL_FILENAME = "weights/best.pt"  # ganti sesuai nama model kamu
-# Optionally set an external model URL in Streamlit Secrets as {"MODEL_URL": "https://.../model.pt"}
-MODEL_URL = st.secrets.get("MODEL_URL", None)
+MODEL_FILENAME = "weights/best.pt"   # lokasi model
+MODEL_URL = st.secrets.get("MODEL_URL", None)  # optional kalau mau download otomatis
+
 
 # ---------- HELPERS ----------
 @st.cache_resource
 def load_model(path=MODEL_FILENAME):
-    # If model not found locally and MODEL_URL is provided, download it
+    """Load model YOLO dari file lokal atau download via URL."""
     if not os.path.exists(path):
         os.makedirs(os.path.dirname(path), exist_ok=True)
         if MODEL_URL:
@@ -30,104 +29,110 @@ def load_model(path=MODEL_FILENAME):
             r = requests.get(MODEL_URL, stream=True)
             r.raise_for_status()
             with open(path, "wb") as f:
-                for chunk in r.iter_content(chunk_size=8192):
+                for chunk in r.iter_content(8192):
                     f.write(chunk)
-            st.success("Model diunduh.")
+            st.success("Model berhasil diunduh.")
         else:
-            st.error("Model tidak ditemukan dan MODEL_URL tidak di-set. Upload model ke folder 'weights/' atau set MODEL_URL di Streamlit Secrets.")
-            raise FileNotFoundError("Model tidak ditemukan")
-    # Load model (Ultralytics YOLO)
+            st.error("Model tidak ditemukan. Upload ke folder 'weights/' atau set MODEL_URL.")
+            raise FileNotFoundError("Model YOLO tidak ditemukan.")
+
     model = YOLO(path)
     return model
 
+
 def read_imagefile(file) -> np.ndarray:
+    """Convert uploaded image ke numpy array."""
     image = Image.open(file).convert("RGB")
     return np.array(image)
 
+
 def draw_boxes(orig_img, results, conf_thresh=0.25):
-    img = orig_img.copy()
+    """Gambar bounding box menggunakan PIL (AMAN di Streamlit Cloud tanpa cv2)."""
+    img = Image.fromarray(orig_img)
+    draw = ImageDraw.Draw(img)
+
     for r in results:
-        # r.boxes.xyxy, r.boxes.conf, r.boxes.cls
         boxes = r.boxes
         if boxes is None:
             continue
-        xyxy = boxes.xyxy.cpu().numpy() if hasattr(boxes, "xyxy") else []
-        confs = boxes.conf.cpu().numpy() if hasattr(boxes, "conf") else []
-        clss = boxes.cls.cpu().numpy().astype(int) if hasattr(boxes, "cls") else []
+
+        xyxy = boxes.xyxy.cpu().numpy()
+        confs = boxes.conf.cpu().numpy()
+        clss = boxes.cls.cpu().numpy().astype(int)
+
         for (x1, y1, x2, y2), conf, cls in zip(xyxy, confs, clss):
             if conf < conf_thresh:
                 continue
-            # draw rectangle and label
-            x1, y1, x2, y2 = map(int, (x1, y1, x2, y2))
-            cv2.rectangle(img, (x1, y1), (x2, y2), (255, 0, 0), 2)
-            label = f"{r.names[cls] if hasattr(r,'names') else cls} {conf:.2f}"
-            cv2.putText(img, label, (x1, y1 - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255,0,0), 2)
-    return img
+
+            # bounding box
+            draw.rectangle([x1, y1, x2, y2], outline="red", width=3)
+
+            # label
+            label = f"{r.names.get(cls, str(cls))} {conf:.2f}"
+            draw.text((x1, y1 - 15), label, fill="red")
+
+    return np.array(img)
+
 
 # ---------- UI ----------
 st.title("🐟 Fish Freshness Detector (YOLOv8m)")
-st.write("Upload foto ikan, aplikasi akan mendeteksi label terkait kesegaran (mis. 'fresh','not_fresh') dan menampilkan bounding box serta confidence.")
+st.write("Upload foto ikan untuk mendeteksi kesegaran menggunakan model YOLOv8m.")
 
-# Load model (cached)
+# Load model YOLO
 try:
     model = load_model()
-except Exception as e:
+except Exception:
     st.stop()
 
-col1, col2 = st.columns([2,1])
+# Upload panel
+uploaded = st.file_uploader("Upload gambar ikan (jpg/png)", type=["jpg", "jpeg", "png"])
+conf_threshold = st.slider("Confidence threshold", 0.05, 0.9, 0.25, step=0.05)
+imgsz = st.slider("Image size (inference)", 256, 1280, 640, step=64)
 
-with col1:
-    uploaded = st.file_uploader("Upload gambar ikan (jpg, png)", type=["jpg","jpeg","png"])
-    conf_threshold = st.slider("Confidence threshold", 0.05, 0.9, 0.25, step=0.05)
-    imgsz = st.slider("Image size (pixels, inference)", 256, 1280, 640, step=64)
+st.sidebar.header("Informasi Model")
+st.sidebar.write("Model:", MODEL_FILENAME)
+if MODEL_URL:
+    st.sidebar.write("Model URL: tersedia")
 
-with col2:
-    st.sidebar.header("Pengaturan")
-    st.sidebar.write("Model:", MODEL_FILENAME)
-    if MODEL_URL:
-        st.sidebar.write("Model URL: set")
-
+# Processing
 if uploaded:
     image_np = read_imagefile(uploaded)
-    st.image(image_np, caption="Input image", use_column_width=True)
+    st.image(image_np, caption="Input Image", use_column_width=True)
+
     with st.spinner("Menjalankan inferensi..."):
-        # Ultralytics model.predict returns Results objects
-        # We pass parameters: imgsz, conf (confidence), save=False
-        results = model.predict(source=image_np, imgsz=imgsz, conf=conf_threshold, verbose=False)
+        results = model.predict(
+            source=image_np,
+            imgsz=imgsz,
+            conf=conf_threshold,
+            verbose=False
+        )
 
-    # draw boxes on image
-    # results is list-like (each result per image), use results[0]
     drawn = draw_boxes(image_np, results, conf_thresh=conf_threshold)
-    st.image(drawn, caption="Deteksi", use_column_width=True)
+    st.image(drawn, caption="Hasil Deteksi", use_column_width=True)
 
-    # Summarize detections
-    st.subheader("Ringkasan deteksi")
+    # Summary
+    st.subheader("📌 Ringkasan Deteksi")
     detections = {}
+
     for r in results:
         boxes = r.boxes
         if boxes is None:
             continue
-        labels = []
-        if hasattr(r, "names"):
-            names_map = r.names
-        else:
-            names_map = {}
-        for i, conf in enumerate(boxes.conf.cpu().numpy()):
+
+        names = r.names
+        confs = boxes.conf.cpu().numpy()
+        clss = boxes.cls.cpu().numpy().astype(int)
+
+        for cls, conf in zip(clss, confs):
             if conf < conf_threshold:
                 continue
-            cls = int(boxes.cls.cpu().numpy()[i])
-            name = names_map.get(cls, str(cls))
-            detections[name] = detections.get(name, 0) + 1
+            label = names.get(cls, str(cls))
+            detections[label] = detections.get(label, 0) + 1
+
     if detections:
-        for k, v in detections.items():
-            st.write(f"- **{k}** : {v} kali")
+        for label, count in detections.items():
+            st.write(f"- **{label}** : {count} kali")
     else:
         st.write("Tidak ada deteksi di atas threshold.")
-
-    # OPTIONAL: a very simple 'freshness score' heuristic if model outputs class probabilities
-    st.markdown("---")
-    st.caption("Catatan: jika model kamu memberi label kelas seperti 'fresh' atau 'stale', gunakan hasil deteksi di atas. Aplikasi ini tidak mengubah output model.")
 else:
-    st.info("Silakan upload gambar untuk memulai.")
-
-
+    st.info("Silakan upload gambar untuk mulai deteksi.")

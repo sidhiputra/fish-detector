@@ -8,7 +8,7 @@ st.set_page_config(page_title="Fish Freshness Detector", layout="centered")
 
 @st.cache_resource
 def load_model():
-    return YOLO("fish_model.pt")     # ganti dengan nama model kamu
+    return YOLO("best.pt")     # ganti dengan nama model kamu
 
 model = load_model()
 
@@ -39,3 +39,4 @@ if uploaded_file:
         cls = int(box.cls[0])
         conf = float(box.conf[0])
         st.write(f"- {model.names[cls]} ({conf:.2f})")
+
